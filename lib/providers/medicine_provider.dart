@@ -9,39 +9,40 @@ class MedicineProvider extends ChangeNotifier {
 
   List<Medicine> get medicines => List.unmodifiable(_medicines);
 
-  /// Load medicines from SQLite and sort by time
   Future<void> loadMedicines() async {
     final data = await MedicineDatabase.instance.getMedicines();
-
     _medicines
       ..clear()
       ..addAll(data);
-
     _sortByTime();
     notifyListeners();
   }
 
-  /// Add a new medicine, save to DB, and schedule notification
   Future<void> addMedicine(Medicine medicine) async {
-    // ✅ 1. INSERT and CAPTURE ID
-    final int id =
-    await MedicineDatabase.instance.insertMedicine(medicine);
+    final id = await MedicineDatabase.instance.insertMedicine(medicine);
+    final medicineWithId = medicine.copyWith(id: id);
 
-    // ✅ 2. Create medicine WITH ID
-    final Medicine medicineWithId =
-    medicine.copyWith(id: id);
+    // ✅ CALL WEEKLY SCHEDULER
+    await _scheduleMedicine(medicineWithId);
 
-    // ✅ 3. Schedule notification using REAL ID
-    await _scheduleMedicineNotification(medicineWithId);
-
-    // Reload list
     await loadMedicines();
   }
 
-  /// Optional: delete medicine
+  Future<void> updateMedicine(Medicine medicine) async {
+    await MedicineDatabase.instance.updateMedicine(medicine);
+
+    // ✅ CANCEL OLD DAYS
+    await NotificationService().cancelAllForMedicine(medicine.id!);
+
+    // ✅ RESCHEDULE
+    await _scheduleMedicine(medicine);
+
+    await loadMedicines();
+  }
+
   Future<void> deleteMedicine(int id) async {
+    await NotificationService().cancelAllForMedicine(id);
     await MedicineDatabase.instance.deleteMedicine(id);
-    await NotificationService().cancelNotification(id);
     await loadMedicines();
   }
 
@@ -53,26 +54,16 @@ class MedicineProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> _scheduleMedicineNotification(Medicine medicine) async {
-    final now = DateTime.now();
-
-    DateTime scheduledTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      medicine.hour,
-      medicine.minute,
-    );
-
-    if (scheduledTime.isBefore(now)) {
-      scheduledTime = scheduledTime.add(const Duration(days: 1));
+  Future<void> _scheduleMedicine(Medicine medicine) async {
+    for (final day in medicine.days) {
+      await NotificationService().scheduleWeekly(
+        id: medicine.id!,
+        title: '💊 Medicine Reminder',
+        body: 'Time to take ${medicine.name} (${medicine.dose})',
+        weekday: day,
+        hour: medicine.hour,
+        minute: medicine.minute,
+      );
     }
-
-    await NotificationService().scheduleNotification(
-      id: medicine.id!,
-      title: '💊 Medicine Reminder',
-      body: 'Time to take ${medicine.name} (${medicine.dose})',
-      scheduledDate: scheduledTime,
-    );
   }
 }

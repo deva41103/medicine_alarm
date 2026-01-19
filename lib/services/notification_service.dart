@@ -1,61 +1,85 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
   static final NotificationService _instance =
   NotificationService._internal();
-
   factory NotificationService() => _instance;
-
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin
-  _flutterLocalNotificationsPlugin =
+  final FlutterLocalNotificationsPlugin _plugin =
   FlutterLocalNotificationsPlugin();
 
-  /// Initialize notifications
   Future<void> init() async {
-    const androidSettings =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+    tzdata.initializeTimeZones();
 
-    const initSettings =
-    InitializationSettings(android: androidSettings);
+    // ✅ REQUIRED
+    tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
 
-    await _flutterLocalNotificationsPlugin.initialize(initSettings);
+    await _plugin.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+    );
+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestExactAlarmsPermission();
+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
   }
 
-  /// Schedule a notification at specific time
-  Future<void> scheduleNotification({
+  Future<void> scheduleWeekly({
     required int id,
     required String title,
     required String body,
-    required DateTime scheduledDate,
+    required int weekday,
+    required int hour,
+    required int minute,
   }) async {
-    final androidDetails = AndroidNotificationDetails(
-      'medicine_channel',
-      'Medicine Reminders',
-      channelDescription: 'Reminder to take medicines',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-    );
+    final scheduled = _nextInstance(weekday, hour, minute);
 
-    final notificationDetails =
-    NotificationDetails(android: androidDetails);
-
-    await _flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
+    await _plugin.zonedSchedule(
+      id + weekday,
       title,
       body,
-      tz.TZDateTime.from(scheduledDate, tz.local),
-      notificationDetails,
+      scheduled,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'medicine_channel',
+          'Medicine Reminders',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+      ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
     );
   }
 
-  /// Cancel notification
+  tz.TZDateTime _nextInstance(int weekday, int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    tz.TZDateTime scheduled =
+    tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+
+    while (scheduled.weekday != weekday || scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
+  }
+
+  Future<void> cancelAllForMedicine(int id) async {
+    for (int d = 1; d <= 7; d++) {
+      await _plugin.cancel(id + d);
+    }
+  }
+
   Future<void> cancelNotification(int id) async {
-    await _flutterLocalNotificationsPlugin.cancel(id);
+    await _plugin.cancel(id);
   }
 }

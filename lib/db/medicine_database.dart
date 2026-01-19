@@ -19,10 +19,11 @@ class MedicineDatabase {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, fileName);
 
-    return await openDatabase(
+    return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -33,46 +34,43 @@ class MedicineDatabase {
         name TEXT NOT NULL,
         dose TEXT NOT NULL,
         hour INTEGER NOT NULL,
-        minute INTEGER NOT NULL
+        minute INTEGER NOT NULL,
+        days TEXT NOT NULL
       )
     ''');
   }
 
-  /// Insert a new medicine
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion == 1) {
+      await db.execute('ALTER TABLE medicines ADD COLUMN days TEXT');
+    }
+  }
+
   Future<int> insertMedicine(Medicine medicine) async {
-    final db = await instance.database;
-    return await db.insert(
+    final db = await database;
+    return db.insert('medicines', medicine.toMap());
+  }
+
+  Future<int> updateMedicine(Medicine medicine) async {
+    final db = await database;
+    return db.update(
       'medicines',
       medicine.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'id = ?',
+      whereArgs: [medicine.id],
     );
   }
 
-  /// Fetch all medicines sorted by time
   Future<List<Medicine>> getMedicines() async {
-    final db = await instance.database;
-
-    final result = await db.query(
-      'medicines',
-      orderBy: 'hour ASC, minute ASC',
-    );
-
+    final db = await database;
+    final result = await db.query('medicines');
     return result.map((e) => Medicine.fromMap(e)).toList();
   }
 
-  /// Delete a medicine (optional bonus feature)
-  Future<int> deleteMedicine(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'medicines',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  /// Close database (good practice)
-  Future<void> close() async {
-    final db = await instance.database;
-    await db.close();
+  Future<void> deleteMedicine(int id) async {
+    final db = await database;
+    await db.delete('medicines', where: 'id = ?', whereArgs: [id]);
   }
 }
+
+

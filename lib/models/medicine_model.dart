@@ -4,6 +4,7 @@ class Medicine {
   final String dose;
   final int hour;
   final int minute;
+  final List<int> days; // 1=Mon ... 7=Sun
 
   Medicine({
     this.id,
@@ -11,21 +12,17 @@ class Medicine {
     required this.dose,
     required this.hour,
     required this.minute,
+    required this.days,
   });
 
-  Medicine copyWith({
-    int? id,
-    String? name,
-    String? dose,
-    int? hour,
-    int? minute,
-  }) {
+  Medicine copyWith({int? id}) {
     return Medicine(
       id: id ?? this.id,
-      name: name ?? this.name,
-      dose: dose ?? this.dose,
-      hour: hour ?? this.hour,
-      minute: minute ?? this.minute,
+      name: name,
+      dose: dose,
+      hour: hour,
+      minute: minute,
+      days: days,
     );
   }
 
@@ -36,16 +33,21 @@ class Medicine {
       'dose': dose,
       'hour': hour,
       'minute': minute,
+      'days': days.join(','), // store as text
     };
   }
 
   factory Medicine.fromMap(Map<String, dynamic> map) {
     return Medicine(
-      id: map['id'] as int?,
-      name: map['name'] as String,
-      dose: map['dose'] as String,
-      hour: map['hour'] as int,
-      minute: map['minute'] as int,
+      id: map['id'],
+      name: map['name'],
+      dose: map['dose'],
+      hour: map['hour'],
+      minute: map['minute'],
+      days: (map['days'] as String)
+          .split(',')
+          .map(int.parse)
+          .toList(),
     );
   }
 }
